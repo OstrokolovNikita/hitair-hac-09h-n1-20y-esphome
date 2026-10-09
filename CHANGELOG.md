@@ -10,3 +10,14 @@
 - Confirmed CN3-2 and CN3-3 are electrically bridged in the factory configuration and both reach CN1-6.
 - Rejected the initial assumption that CN3 can immediately be used as a conventional independent TX/RX UART.
 - Added passive receive-only CN3 signal sniffer. No transmission to the air conditioner is possible in this firmware.
+
+
+## v0.2.0 — 2026-10-09
+
+- Passive CN3 capture confirmed the stock control path is Coolix.
+- Captured/decoded: 0xB23F40 = COOL 24 °C HIGH, 0xB23FC0 = COOL 25 °C HIGH, 0xB27BE0 = OFF.
+- RX polarity corrected to active-low/inverted for native Coolix decoding.
+- Added native ESPHome Coolix climate with receiver synchronization from the stock remote.
+- Added direct CN3 TX through a safe N-MOSFET pull-down on GPIO6.
+- Added persistent "Без звука" using B5F5A5 with automatic reapply after OFF -> ON.
+- Added remembered fan speed, last active mode, HEAT -> 30 °C and COOL -> 25 °C behavior from the Midea/Castorama project.
