@@ -107,3 +107,32 @@ Capture this stock-remote sequence:
 11. OFF.
 
 If the shared node produces demodulated remote pulses, the 5-pin CN3 architecture is confirmed.
+
+
+## 2026-10-09 — passive capture confirmed Coolix on CN3
+
+The passive GPIO4 capture produced three clean 200-symbol frames on the shared CN3-2/CN3-3 node.
+
+Manual decoding of the captured Pronto timings gives:
+
+| Time | Decoded Coolix | Meaning |
+|---|---|---|
+| 20:06:45 | `0xB23F40` | COOL 24 °C, fan HIGH |
+| 20:06:53 | `0xB23FC0` | COOL 25 °C, fan HIGH |
+| 20:06:59 | `0xB27BE0` | OFF |
+
+This is decisive confirmation that CN3-2/CN3-3 carries the demodulated Coolix control waveform used by the indoor main board.
+
+The stock receiver output is idle-high at approximately 5 V and pulls low for marks.
+
+### Architectural decision for v0.2
+
+For the next stage we do **not** touch REC1 itself and we do **not** use an optical IR LED.
+
+- RX: passive read of CN3-2/3 through the existing 47k/68k divider to GPIO4.
+- TX: open-drain style pull-down of the same CN3-2/3 node using an N-MOSFET driven by GPIO6.
+- ESP32-C3 power: CN3-4 (+5 V) / CN3-5 (GND), after the separate power test succeeded.
+- Native ESPHome Coolix climate gets `receiver_id`, so the stock remote updates Home Assistant state.
+- `0xB5F5A5` is used for the persistent Display/Sound toggle, matching the already proven Midea/Castorama project.
+
+A direct ESP GPIO must not be connected to the 5 V signal node. The MOSFET is the safe level-isolated pull-down driver; it is connected at CN3, not at the IR receiver package.
