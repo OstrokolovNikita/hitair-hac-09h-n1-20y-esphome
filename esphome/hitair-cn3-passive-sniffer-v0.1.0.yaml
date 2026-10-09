@@ -1,0 +1,85 @@
+substitutions:
+  device_name: hitair-cn3-sniffer
+  friendly_name: "HitAir CN3 Sniffer"
+
+esphome:
+  name: ${device_name}
+  friendly_name: ${friendly_name}
+  comment: "HitAir HAC/in-09H/N1_20Y passive CN3 signal sniffer v0.1.0"
+
+esp32:
+  board: esp32-c3-devkitm-1
+  framework:
+    type: esp-idf
+
+logger:
+  level: DEBUG
+  hardware_uart: USB_SERIAL_JTAG
+
+api:
+  encryption:
+    key: !secret api_encryption_key
+
+ota:
+  - platform: esphome
+    password: !secret ota_password
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  ap:
+    ssid: "${friendly_name} Fallback"
+    password: !secret fallback_password
+
+captive_portal:
+
+# ---------------------------------------------------------------------------
+# v0.1.0 — PASSIVE RECEIVE ONLY
+#
+# PURPOSE:
+#   Determine what the factory-bridged CN3-2/CN3-3 node carries.
+#
+# WIRING FOR THE FIRST LIVE TEST:
+#
+#   CN3-5 (GND) ------------------------------ ESP GND
+#
+#   CN3-2 OR CN3-3 ---- 47k ----+------------- GPIO4
+#                                |
+#                               68k
+#                                |
+#   CN3-5 (GND) -----------------+------------- ESP GND
+#
+# The 47k/68k divider reduces a possible 5 V logic-high to about 3.0 V.
+#
+# IMPORTANT:
+# - Power the ESP from a separate USB power bank for the first test.
+# - Do NOT connect ESP 5V to CN3-4 yet.
+# - Do NOT connect any ESP output to CN3.
+# - Do NOT cut/remove the CN3-2 <-> CN3-3 factory bridge.
+# - There is intentionally NO remote_transmitter and NO UART TX here.
+# ---------------------------------------------------------------------------
+
+remote_receiver:
+  id: cn3_passive_receiver
+  pin:
+    number: GPIO4
+    mode:
+      input: true
+      pullup: false
+  dump: all
+  tolerance: 30%
+  filter: 10us
+  idle: 10ms
+
+sensor:
+  - platform: wifi_signal
+    name: "WiFi RSSI"
+    update_interval: 30s
+
+text_sensor:
+  - platform: version
+    name: "ESPHome Version"
+
+button:
+  - platform: restart
+    name: "Restart ESP"
