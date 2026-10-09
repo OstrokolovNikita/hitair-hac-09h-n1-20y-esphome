@@ -59,7 +59,18 @@ This matches the known older Midea 5-pin CN3 receiver-board architecture: the tw
 
 Some Midea variants use a separate Wi-Fi subassembly (for example CE-26GY-2.4G / 17122000046741) which is inserted at this 5-pin interface and exposes the usual 4-wire Wi-Fi UART on the other side.
 
-This interpretation is still treated as a hypothesis until the live signal on CN3-2/3 is captured on this exact HitAir unit.
+### Powered measurements (2026-10-09)
+
+With the receiver board connected and powered:
+
+- CN3-5 is the reference ground already confirmed by continuity to CN1-8 / CN2 GND.
+- CN3-2 and CN3-3 sit at approximately **+5 V relative to CN3-5 while idle**.
+- Reversing the meter leads (black on CN3-2/3, red on CN3-5) therefore reads approximately **-5 V**. This is expected and confirms the polarity; it does not mean CN3-5 is a negative supply.
+- Small ~0.2 V movement on a handheld multimeter during commands is not useful for identifying the pulse train because the expected signal changes on a microsecond timescale and the meter only shows an average.
+
+The idle-high ~5 V level on the bridged CN3-2/CN3-3 node strongly supports the working hypothesis that this is the demodulated IR / control signal path.
+
+This interpretation remains provisional until the pulse train is captured with the passive ESP sniffer on this exact HitAir unit.
 
 ## Safety / measurement rule
 
