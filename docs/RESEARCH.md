@@ -72,4 +72,38 @@ Next measurements:
 2. CN3-2/3 to CN3-5 idle DC voltage.
 3. Passive capture of CN3-2/3 while pressing the stock remote.
 
+### Powered DC check
+
+The shared CN3-2/CN3-3 node was measured at approximately **+5 V relative to CN3-5** in the idle state.
+
+A handheld multimeter showed only small / unstable changes (~0.2 V scale) during commands. This is expected: an IR receiver output is a fast pulse train, so a DC multimeter averages the waveform and cannot reliably display it.
+
+**Important:** the next pulse test must be performed with the physical stock HitAir remote pointed at REC1. A voice command through Alice is not a valid test unless it is known to drive this exact onboard IR receiver.
+
+### Next step — passive waveform capture
+
+Use the receive-only ESP32-C3 firmware:
+`esphome/hitair-cn3-passive-sniffer-v0.1.0.yaml`
+
+Physical connection:
+- CN3-5 -> ESP GND;
+- CN3-2 (or CN3-3, they are the same node) -> 47k -> GPIO4;
+- GPIO4 -> 68k -> CN3-5 / ESP GND;
+- ESP powered from an isolated USB power bank;
+- no ESP output connected to the air conditioner;
+- no USB cable to a PC while the ESP is electrically connected to the powered air conditioner.
+
+Capture this stock-remote sequence:
+1. OFF / idle for ~10 s;
+2. POWER ON;
+3. COOL 24 °C;
+4. COOL 25 °C;
+5. FAN LOW;
+6. FAN MEDIUM;
+7. FAN HIGH;
+8. FAN AUTO;
+9. HEAT 24 °C;
+10. SWING;
+11. OFF.
+
 If the shared node produces demodulated remote pulses, the 5-pin CN3 architecture is confirmed.
