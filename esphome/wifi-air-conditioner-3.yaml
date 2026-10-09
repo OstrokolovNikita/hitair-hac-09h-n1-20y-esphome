@@ -5,7 +5,6 @@ substitutions:
 esphome:
   name: ${device_name}
   friendly_name: ${friendly_name}
-  comment: "HitAir HAC/in-09H/N1_20Y direct CN3 Coolix control v0.2.0"
 
   on_boot:
     - priority: -100
