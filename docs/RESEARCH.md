@@ -173,3 +173,26 @@ Until the bridge location on this exact EU-KFR26G/N1Y-AB1.D.01.XP1-1 board is po
 The TX self-test returned `FAIL - CN3 stayed HIGH`, but this was expected because **no TX hardware had been installed yet**. At this stage the ESP was connected only for passive RX through the 47k/68k divider to GPIO4. GPIO6 was not physically connected to CN3 through a MOSFET or any other driver.
 
 Therefore this test does **not** indicate a wiring fault and does not provide evidence about CN3 transmit capability. The next real hardware step is to add a safe open-drain TX driver before testing transmission.
+
+
+## 2026-10-10 — TX hardware works; strict two-frame Coolix required
+
+After the NPN pull-down driver was physically installed on GPIO6, the ESP received its own transmitted waveform back on GPIO4:
+
+- TX 0xB23FC0 -> RX 0xB23FC0
+- TX 0xB27BE0 -> RX 0xB27BE0
+- TX 0xB5F5A5 -> RX 0xB5F5A5
+
+Therefore the GPIO6 -> transistor -> CN3 signal path is electrically working.
+
+However ESPHome logged these manually generated test packets as **Received unstrict Coolix: [0x...]**, while the stock HitAir remote is logged as **Received Coolix: 0x...**.
+
+ESPHome's Coolix protocol implementation defines strict Coolix as two identical frames (first == second). A Coolix action with only `first:` sends only one frame. When `second:` is supplied, the encoder sends a second frame after the Coolix inter-frame space.
+
+Working hypothesis: this HitAir/Midea main board requires the strict two-frame Coolix packet used by the stock remote and ignores a single-frame/unstrict packet.
+
+Next firmware revision sends every explicit test and mute command with:
+- first: CODE
+- second: CODE
+
+The native ESPHome Coolix climate path is also retained for comparison.
