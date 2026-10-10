@@ -1,3 +1,4 @@
+# Wifi air conditioner 3 — v0.2.1 TX diagnostics
 substitutions:
   device_name: wifi-air-conditioner-3
   friendly_name: "Wifi air conditioner 3"
@@ -38,7 +39,6 @@ ota:
 wifi:
   ssid: !secret wifi_ssid
   password: !secret wifi_password
-  use_address: 192.168.31.204
   ap:
     ssid: "${friendly_name} Fallback"
     password: !secret fallback_password
@@ -407,3 +407,28 @@ text_sensor:
 button:
   - platform: restart
     name: "Restart ESP"
+
+  - platform: template
+    name: "TX линия 1 сек"
+    on_press:
+      - logger.log: "TX DIAG: holding CN3 signal LOW for 1 second"
+      - remote_transmitter.transmit_raw:
+          transmitter_id: ac_tx
+          code: [1000000, -1000]
+          carrier_frequency: 0Hz
+
+  - platform: template
+    name: "TX тест COOL 25 HIGH"
+    on_press:
+      - logger.log: "TX DIAG: sending Coolix 0xB23FC0"
+      - remote_transmitter.transmit_coolix:
+          transmitter_id: ac_tx
+          first: 0xB23FC0
+
+  - platform: template
+    name: "TX тест OFF"
+    on_press:
+      - logger.log: "TX DIAG: sending Coolix 0xB27BE0"
+      - remote_transmitter.transmit_coolix:
+          transmitter_id: ac_tx
+          first: 0xB27BE0
