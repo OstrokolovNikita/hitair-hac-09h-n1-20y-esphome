@@ -196,3 +196,19 @@ Next firmware revision sends every explicit test and mute command with:
 - second: CODE
 
 The native ESPHome Coolix climate path is also retained for comparison.
+
+
+## 2026-10-10 — strict Coolix TX confirmed on real unit
+
+With the NPN open-collector driver installed on GPIO6 -> CN3 signal line, the strict two-frame Coolix tests were successful on the actual HitAir unit.
+
+Confirmed:
+- `0xB23FC0 / 0xB23FC0` -> unit beeped and entered COOL 25 °C HIGH;
+- automatic persistent `0xB5F5A5 / 0xB5F5A5` followed after power-on;
+- `0xB27BE0 / 0xB27BE0` -> unit switched OFF;
+- OFF was executed silently after the B5F5A5 command, confirming that the Display/Sound toggle affects the buzzer on this HitAir revision;
+- explicit B5F5A5 while OFF produced a beep, so mute tests should be performed while the unit is ON.
+
+ESP RX saw every transmitted command back as **STRICT** Coolix, proving the complete TX electrical path and double-frame format.
+
+Next validation stage: control exclusively from the Home Assistant climate entity (temperature, fan speeds, modes, swing, OFF/ON restore) while checking physical response and stock-remote reverse synchronization.
