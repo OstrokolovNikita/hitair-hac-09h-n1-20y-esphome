@@ -136,3 +136,34 @@ For the next stage we do **not** touch REC1 itself and we do **not** use an opti
 - `0xB5F5A5` is used for the persistent Display/Sound toggle, matching the already proven Midea/Castorama project.
 
 A direct ESP GPIO must not be connected to the 5 V signal node. The MOSFET is the safe level-isolated pull-down driver; it is connected at CN3, not at the IR receiver package.
+
+
+## 2026-10-10 — why direct parallel TX did not work
+
+The receive path is confirmed working, but commands transmitted by ESP through the parallel MOSFET injection were not accepted by the indoor unit.
+
+A matching investigation of older Midea 5-pin CN3 receiver boards reports the same topology measured on this HitAir board: the CN3 **TX** and **REC** pins are factory-shorted (via bridge/jumper **J3**) when the optional Wi-Fi interface is not installed. In that configuration REC1 feeds the main board directly. To use the optional interface as a real man-in-the-middle, the TX/REC bridge must be opened; the inserted interface then receives the stock IR waveform on the REC side and retransmits it to the main-board TX side while also being able to inject its own commands.
+
+This matches our measurements:
+- CN3-2 <-> CN3-3 ~0.2 ohm;
+- both reach CN1-6;
+- stock-remote Coolix is visible on the shared node;
+- passive RX works reliably;
+- parallel ESP TX changes HA state but the indoor unit does not react.
+
+### Revised architecture
+
+The target architecture is now:
+
+REC1 -> CN3 REC side -> ESP RX -> ESP forward/inject -> CN3 TX side -> CN1/main board
+
+The factory TX/REC bridge must be separated before this architecture can work correctly.
+
+After separation:
+- stock remote must still work because ESP forwards every received raw Coolix waveform;
+- Home Assistant commands are injected on the TX/main-board side;
+- HA state is updated from the REC side;
+- no optical IR LED is required;
+- no transistor connection to the REC1 package itself is required.
+
+Until the bridge location on this exact EU-KFR26G/N1Y-AB1.D.01.XP1-1 board is positively identified, do not cut traces or remove jumpers.
