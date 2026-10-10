@@ -21,3 +21,18 @@
 - Added direct CN3 TX through a safe N-MOSFET pull-down on GPIO6.
 - Added persistent "Без звука" using B5F5A5 with automatic reapply after OFF -> ON.
 - Added remembered fan speed, last active mode, HEAT -> 30 °C and COOL -> 25 °C behavior from the Midea/Castorama project.
+
+
+## v1.0.0 — 2026-10-10
+
+- Confirmed reliable strict two-frame Coolix TX on the real HitAir unit.
+- Confirmed working COOL / HEAT / DRY / FAN_ONLY / AUTO modes.
+- Confirmed 17–30 °C target temperature control.
+- Confirmed AUTO / LOW / MEDIUM / HIGH fan control.
+- Confirmed vertical swing actuation.
+- Confirmed stock remote -> Home Assistant state synchronization.
+- Confirmed persistent "Без звука" via 0xB5F5A5; the same toggle also turns the indoor display off.
+- Retained HEAT -> 30 °C and COOL -> 25 °C behavior.
+- Retained remembered fan speed and last active mode for climate.turn_on / voice-assistant use.
+- Removed temporary TX diagnostics, RSSI/version entities and test buttons from the Home Assistant device page.
+- Fixed the Home Assistant swing indication being toggled back off by the ESP receiving its own B26BE0 transmission echo.
