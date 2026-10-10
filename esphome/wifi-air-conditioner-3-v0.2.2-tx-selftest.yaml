@@ -1,0 +1,97 @@
+substitutions:
+  device_name: wifi-air-conditioner-3
+  friendly_name: "Wifi air conditioner 3"
+
+esphome:
+  name: ${device_name}
+  friendly_name: ${friendly_name}
+  on_boot:
+    - priority: 600
+      then:
+        - output.turn_off: tx_gate
+
+esp32:
+  board: esp32-c3-devkitm-1
+  framework:
+    type: esp-idf
+
+logger:
+  level: INFO
+  hardware_uart: USB_SERIAL_JTAG
+
+api:
+  encryption:
+    key: !secret api_encryption_key
+
+ota:
+  - platform: esphome
+    encryption:
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  ap:
+    ssid: "${friendly_name} Fallback"
+    password: !secret fallback_password
+
+captive_portal:
+
+remote_receiver:
+  id: ac_rx
+  pin:
+    number: GPIO4
+    inverted: true
+    mode:
+      input: true
+      pullup: false
+  dump: coolix
+  tolerance: 30%
+  filter: 10us
+  idle: 10ms
+
+output:
+  - platform: gpio
+    id: tx_gate
+    pin:
+      number: GPIO6
+      inverted: false
+
+text_sensor:
+  - platform: template
+    id: tx_test_result
+    name: "TX test result"
+    update_interval: never
+
+  - platform: version
+    name: "ESPHome Version"
+
+button:
+  - platform: template
+    name: "TX self-test"
+    on_press:
+      - lambda: |-
+          id(tx_test_result).publish_state("TESTING");
+          ESP_LOGI("HITAIR", "TX SELF-TEST: idle GPIO4=%d", gpio_get_level(GPIO_NUM_4));
+      - output.turn_on: tx_gate
+      - delay: 500ms
+      - lambda: |-
+          int level = gpio_get_level(GPIO_NUM_4);
+          if (level == 0) {
+            id(tx_test_result).publish_state("OK - CN3 LOW");
+            ESP_LOGI("HITAIR", "TX SELF-TEST: OK, CN3 line is LOW");
+          } else {
+            id(tx_test_result).publish_state("FAIL - CN3 stayed HIGH");
+            ESP_LOGE("HITAIR", "TX SELF-TEST: FAIL, CN3 line stayed HIGH");
+          }
+      - output.turn_off: tx_gate
+      - delay: 300ms
+      - lambda: |-
+          ESP_LOGI("HITAIR", "TX SELF-TEST: released GPIO4=%d", gpio_get_level(GPIO_NUM_4));
+
+  - platform: restart
+    name: "Restart ESP"
+
+sensor:
+  - platform: wifi_signal
+    name: "WiFi RSSI"
+    update_interval: 30s
