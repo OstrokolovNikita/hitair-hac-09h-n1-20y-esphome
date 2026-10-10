@@ -167,3 +167,19 @@ After separation:
 - no transistor connection to the REC1 package itself is required.
 
 Until the bridge location on this exact EU-KFR26G/N1Y-AB1.D.01.XP1-1 board is positively identified, do not cut traces or remove jumpers.
+
+
+## 2026-10-10 — TX self-test isolates the fault to the physical pull-down path
+
+The dedicated self-test drove GPIO6 active for 500 ms while GPIO4 monitored the same CN3 signal node.
+
+Observed:
+- idle GPIO4 = HIGH;
+- while GPIO6 was asserted, GPIO4 remained HIGH;
+- after release, GPIO4 remained HIGH.
+
+Therefore the ESP output is **not electrically pulling the CN3 signal node low**.
+
+This result is important because it rules out protocol timing, Coolix encoding, mute logic, and Home Assistant as the immediate cause. It also means the earlier TX/REC bridge discussion does **not** explain the present failure: a correctly wired open-drain N-MOSFET connected from the shared CN3 node to GND should pull the node low even while CN3-2/CN3-3 are bridged.
+
+Immediate next step: inspect the physical GPIO6 -> gate resistor -> N-MOSFET -> CN3 wiring and the actual transistor pinout/marking before changing firmware or cutting any board jumper.
