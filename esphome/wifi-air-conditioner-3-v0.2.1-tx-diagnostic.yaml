@@ -1,0 +1,434 @@
+# Wifi air conditioner 3 — v0.2.1 TX diagnostics
+substitutions:
+  device_name: wifi-air-conditioner-3
+  friendly_name: "Wifi air conditioner 3"
+
+esphome:
+  name: ${device_name}
+  friendly_name: ${friendly_name}
+
+  on_boot:
+    - priority: -100
+      then:
+        - lambda: |-
+            id(mute_switch).publish_state(id(mute_desired));
+            ESP_LOGI("HITAIR", "Boot: mute preference = %s",
+                     id(mute_desired) ? "ON" : "OFF");
+
+esp32:
+  board: esp32-c3-devkitm-1
+  framework:
+    type: esp-idf
+
+logger:
+  level: INFO
+  hardware_uart: USB_SERIAL_JTAG
+
+api:
+  encryption:
+    key: !secret api_encryption_key
+
+  on_client_connected:
+    - lambda: |-
+        id(mute_switch).publish_state(id(mute_desired));
+
+ota:
+  - platform: esphome
+    encryption:
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  ap:
+    ssid: "${friendly_name} Fallback"
+    password: !secret fallback_password
+
+captive_portal:
+
+globals:
+  - id: preferred_fan
+    type: uint8_t
+    restore_value: yes
+    initial_value: '0'
+
+  - id: last_active_mode
+    type: uint8_t
+    restore_value: yes
+    initial_value: '2'
+
+  - id: mute_desired
+    type: bool
+    restore_value: yes
+    initial_value: 'true'
+
+  - id: mute_active
+    type: bool
+    restore_value: no
+    initial_value: 'false'
+
+  - id: mute_tx_pending
+    type: bool
+    restore_value: no
+    initial_value: 'false'
+
+  - id: ac_was_on
+    type: bool
+    restore_value: no
+    initial_value: 'false'
+
+remote_receiver:
+  id: ac_rx
+  pin:
+    number: GPIO4
+    inverted: true
+    mode:
+      input: true
+      pullup: false
+  dump: coolix
+  tolerance: 30%
+  filter: 10us
+  idle: 10ms
+
+  on_coolix:
+    then:
+      - lambda: |-
+          uint32_t code = x.second != 0 ? x.second : x.first;
+          ESP_LOGI("HITAIR", "RX Coolix: 0x%06X", (unsigned) code);
+
+          if (code == 0xB5F5A5) {
+            if (id(mute_tx_pending)) {
+              id(mute_tx_pending) = false;
+              ESP_LOGI("HITAIR", "Own Display/Sound toggle echoed");
+            } else {
+              id(mute_active) = !id(mute_active);
+              id(mute_desired) = id(mute_active);
+              id(mute_switch).publish_state(id(mute_desired));
+              ESP_LOGI("HITAIR", "External Display/Sound toggle; mute=%s",
+                       id(mute_active) ? "ON" : "OFF");
+            }
+          }
+
+          if (code == 0xB27BE0) {
+            id(mute_active) = false;
+            id(mute_tx_pending) = false;
+          }
+
+remote_transmitter:
+  id: ac_tx
+  pin:
+    number: GPIO6
+    inverted: false
+  carrier_duty_percent: 100%
+
+script:
+  - id: clear_mute_pending
+    mode: restart
+    then:
+      - delay: 1200ms
+      - lambda: |-
+          id(mute_tx_pending) = false;
+
+  - id: reapply_mute_after_power_on
+    mode: restart
+    then:
+      - delay: 700ms
+      - if:
+          condition:
+            lambda: |-
+              return id(mute_desired) &&
+                     !id(mute_active) &&
+                     id(ac_climate)->mode != climate::CLIMATE_MODE_OFF;
+          then:
+            - lambda: |-
+                id(mute_active) = true;
+                id(mute_tx_pending) = true;
+                ESP_LOGI("HITAIR", "Re-applying persistent mute B5F5A5");
+            - remote_transmitter.transmit_coolix:
+                transmitter_id: ac_tx
+                first: 0xB5F5A5
+            - script.execute: clear_mute_pending
+
+switch:
+  - platform: template
+    id: mute_switch
+    name: "Без звука"
+    restore_mode: DISABLED
+
+    lambda: |-
+      return id(mute_desired);
+
+    turn_on_action:
+      - lambda: |-
+          id(mute_desired) = true;
+          id(mute_switch).publish_state(true);
+
+      - if:
+          condition:
+            lambda: |-
+              return id(ac_climate)->mode != climate::CLIMATE_MODE_OFF &&
+                     !id(mute_active);
+          then:
+            - lambda: |-
+                id(mute_active) = true;
+                id(mute_tx_pending) = true;
+            - remote_transmitter.transmit_coolix:
+                transmitter_id: ac_tx
+                first: 0xB5F5A5
+            - script.execute: clear_mute_pending
+
+    turn_off_action:
+      - lambda: |-
+          id(mute_desired) = false;
+          id(mute_switch).publish_state(false);
+
+      - if:
+          condition:
+            lambda: |-
+              return id(ac_climate)->mode != climate::CLIMATE_MODE_OFF &&
+                     id(mute_active);
+          then:
+            - lambda: |-
+                id(mute_active) = false;
+                id(mute_tx_pending) = true;
+            - remote_transmitter.transmit_coolix:
+                transmitter_id: ac_tx
+                first: 0xB5F5A5
+            - script.execute: clear_mute_pending
+          else:
+            - lambda: |-
+                id(mute_active) = false;
+                id(mute_tx_pending) = false;
+
+climate:
+  - platform: coolix
+    id: ac_climate
+    name: "Кондиционер"
+
+    transmitter_id: ac_tx
+    receiver_id: ac_rx
+
+    supports_cool: true
+    supports_heat: true
+
+    visual:
+      min_temperature: 17
+      max_temperature: 30
+      temperature_step: 1
+
+    on_control:
+      - lambda: |-
+          auto requested_mode = x.get_mode();
+          auto requested_fan = x.get_fan_mode();
+
+          climate::ClimateMode effective_mode = id(ac_climate)->mode;
+          if (requested_mode.has_value())
+            effective_mode = *requested_mode;
+
+          if (
+            requested_fan.has_value() &&
+            (
+              effective_mode == climate::CLIMATE_MODE_COOL ||
+              effective_mode == climate::CLIMATE_MODE_HEAT ||
+              effective_mode == climate::CLIMATE_MODE_FAN_ONLY
+            )
+          ) {
+            switch (*requested_fan) {
+              case climate::CLIMATE_FAN_LOW:
+                id(preferred_fan) = 1;
+                break;
+              case climate::CLIMATE_FAN_MEDIUM:
+                id(preferred_fan) = 2;
+                break;
+              case climate::CLIMATE_FAN_HIGH:
+                id(preferred_fan) = 3;
+                break;
+              case climate::CLIMATE_FAN_AUTO:
+              default:
+                id(preferred_fan) = 0;
+                break;
+            }
+          }
+
+          if (requested_mode.has_value()) {
+            climate::ClimateMode old_mode = id(ac_climate)->mode;
+            climate::ClimateMode new_mode = *requested_mode;
+
+            if (
+              old_mode == climate::CLIMATE_MODE_OFF &&
+              new_mode == climate::CLIMATE_MODE_HEAT_COOL
+            ) {
+              switch (id(last_active_mode)) {
+                case 1:
+                  new_mode = climate::CLIMATE_MODE_HEAT_COOL;
+                  break;
+                case 3:
+                  new_mode = climate::CLIMATE_MODE_HEAT;
+                  break;
+                case 4:
+                  new_mode = climate::CLIMATE_MODE_FAN_ONLY;
+                  break;
+                case 5:
+                  new_mode = climate::CLIMATE_MODE_DRY;
+                  break;
+                case 2:
+                default:
+                  new_mode = climate::CLIMATE_MODE_COOL;
+                  break;
+              }
+              x.set_mode(new_mode);
+            }
+
+            switch (new_mode) {
+              case climate::CLIMATE_MODE_HEAT_COOL:
+                id(last_active_mode) = 1;
+                break;
+              case climate::CLIMATE_MODE_COOL:
+                id(last_active_mode) = 2;
+                break;
+              case climate::CLIMATE_MODE_HEAT:
+                id(last_active_mode) = 3;
+                break;
+              case climate::CLIMATE_MODE_FAN_ONLY:
+                id(last_active_mode) = 4;
+                break;
+              case climate::CLIMATE_MODE_DRY:
+                id(last_active_mode) = 5;
+                break;
+              default:
+                break;
+            }
+
+            if (
+              new_mode == climate::CLIMATE_MODE_HEAT &&
+              old_mode != climate::CLIMATE_MODE_HEAT
+            ) {
+              x.set_target_temperature(30.0f);
+            } else if (
+              new_mode == climate::CLIMATE_MODE_COOL &&
+              old_mode != climate::CLIMATE_MODE_COOL
+            ) {
+              x.set_target_temperature(25.0f);
+            }
+
+            if (
+              !requested_fan.has_value() &&
+              (
+                new_mode == climate::CLIMATE_MODE_COOL ||
+                new_mode == climate::CLIMATE_MODE_HEAT ||
+                new_mode == climate::CLIMATE_MODE_FAN_ONLY
+              )
+            ) {
+              switch (id(preferred_fan)) {
+                case 1:
+                  x.set_fan_mode(climate::CLIMATE_FAN_LOW);
+                  break;
+                case 2:
+                  x.set_fan_mode(climate::CLIMATE_FAN_MEDIUM);
+                  break;
+                case 3:
+                  x.set_fan_mode(climate::CLIMATE_FAN_HIGH);
+                  break;
+                default:
+                  x.set_fan_mode(climate::CLIMATE_FAN_AUTO);
+                  break;
+              }
+            }
+          }
+
+    on_state:
+      - lambda: |-
+          bool now_on = id(ac_climate)->mode != climate::CLIMATE_MODE_OFF;
+
+          if (now_on) {
+            switch (id(ac_climate)->mode) {
+              case climate::CLIMATE_MODE_HEAT_COOL:
+                id(last_active_mode) = 1;
+                break;
+              case climate::CLIMATE_MODE_COOL:
+                id(last_active_mode) = 2;
+                break;
+              case climate::CLIMATE_MODE_HEAT:
+                id(last_active_mode) = 3;
+                break;
+              case climate::CLIMATE_MODE_FAN_ONLY:
+                id(last_active_mode) = 4;
+                break;
+              case climate::CLIMATE_MODE_DRY:
+                id(last_active_mode) = 5;
+                break;
+              default:
+                break;
+            }
+
+            if (
+              id(ac_climate)->mode == climate::CLIMATE_MODE_COOL ||
+              id(ac_climate)->mode == climate::CLIMATE_MODE_HEAT ||
+              id(ac_climate)->mode == climate::CLIMATE_MODE_FAN_ONLY
+            ) {
+              auto f = id(ac_climate)->fan_mode;
+              if (f.has_value()) {
+                switch (*f) {
+                  case climate::CLIMATE_FAN_LOW:
+                    id(preferred_fan) = 1;
+                    break;
+                  case climate::CLIMATE_FAN_MEDIUM:
+                    id(preferred_fan) = 2;
+                    break;
+                  case climate::CLIMATE_FAN_HIGH:
+                    id(preferred_fan) = 3;
+                    break;
+                  case climate::CLIMATE_FAN_AUTO:
+                  default:
+                    id(preferred_fan) = 0;
+                    break;
+                }
+              }
+            }
+          } else {
+            id(mute_active) = false;
+            id(mute_tx_pending) = false;
+          }
+
+          if (now_on && !id(ac_was_on) && id(mute_desired)) {
+            id(reapply_mute_after_power_on).execute();
+          }
+
+          id(ac_was_on) = now_on;
+
+sensor:
+  - platform: wifi_signal
+    name: "WiFi RSSI"
+    update_interval: 30s
+
+text_sensor:
+  - platform: version
+    name: "ESPHome Version"
+
+button:
+  - platform: restart
+    name: "Restart ESP"
+
+  - platform: template
+    name: "TX линия 1 сек"
+    on_press:
+      - logger.log: "TX DIAG: holding CN3 signal LOW for 1 second"
+      - remote_transmitter.transmit_raw:
+          transmitter_id: ac_tx
+          code: [1000000, -1000]
+          carrier_frequency: 0Hz
+
+  - platform: template
+    name: "TX тест COOL 25 HIGH"
+    on_press:
+      - logger.log: "TX DIAG: sending Coolix 0xB23FC0"
+      - remote_transmitter.transmit_coolix:
+          transmitter_id: ac_tx
+          first: 0xB23FC0
+
+  - platform: template
+    name: "TX тест OFF"
+    on_press:
+      - logger.log: "TX DIAG: sending Coolix 0xB27BE0"
+      - remote_transmitter.transmit_coolix:
+          transmitter_id: ac_tx
+          first: 0xB27BE0
